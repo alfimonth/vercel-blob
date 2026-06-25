@@ -3,7 +3,7 @@ import Header from "../components/Header";
 
 const HomePage = () => {
   return (
-    <div>
+    <div style={{ textAlign: "center", display: "flex", flexDirection: "column" }}>
       <Header />
 
       <Link to="/root">Start Contribution</Link>

@@ -1,0 +1,17 @@
+{
+  "name": "webpis",
+  "short_name": "webpis",
+  "description": "Galeri dan upload gambar dengan kompresi otomatis ke WebP.",
+  "icons": [
+    {
+      "src": "/webpis.png",
+      "sizes": "2000x2000",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617"
+}
