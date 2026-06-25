@@ -205,6 +205,9 @@ export default function App() {
   const [activePrefix, setActivePrefix] = useState(ROOT_PREFIX);
   const [folders, setFolders] = useState<GalleryFolder[]>([]);
   const [images, setImages] = useState<GalleryImage[]>([]);
+  const [selectedFolderPathnames, setSelectedFolderPathnames] = useState<
+    Set<string>
+  >(new Set());
   const [selectedImagePathnames, setSelectedImagePathnames] = useState<
     Set<string>
   >(new Set());
@@ -222,10 +225,15 @@ export default function App() {
     null,
   );
 
-  const selectedCount = selectedImagePathnames.size;
+  const selectedCount =
+    selectedFolderPathnames.size + selectedImagePathnames.size;
   const isRootDirectory = activePrefix === ROOT_PREFIX;
-  const allVisibleImagesSelected =
-    images.length > 0 &&
+  const visibleItemCount = folders.length + images.length;
+  const allVisibleItemsSelected =
+    visibleItemCount > 0 &&
+    folders.every((folder) =>
+      selectedFolderPathnames.has(folder.pathname),
+    ) &&
     images.every((image) => selectedImagePathnames.has(image.pathname));
 
   const selectedFilePreviews = useMemo(
@@ -307,6 +315,7 @@ export default function App() {
         options?.reset ? result.images : [...current, ...result.images],
       );
       if (options?.reset) {
+        setSelectedFolderPathnames(new Set());
         setSelectedImagePathnames(new Set());
       }
       setCursor(result.cursor);
@@ -385,22 +394,55 @@ export default function App() {
     });
   }
 
+  function toggleFolderSelection(pathname: string) {
+    setSelectedFolderPathnames((current) => {
+      const next = new Set(current);
+
+      if (next.has(pathname)) {
+        next.delete(pathname);
+      } else {
+        next.add(pathname);
+      }
+
+      return next;
+    });
+  }
+
   function toggleAllVisibleImages() {
-    setSelectedImagePathnames((current) => {
-      if (allVisibleImagesSelected) {
-        return new Set(
+    if (allVisibleItemsSelected) {
+      setSelectedFolderPathnames((current) =>
+        new Set(
+          [...current].filter(
+            (pathname) =>
+              !folders.some((folder) => folder.pathname === pathname),
+          ),
+        ),
+      );
+      setSelectedImagePathnames((current) =>
+        new Set(
           [...current].filter(
             (pathname) =>
               !images.some((image) => image.pathname === pathname),
           ),
-        );
-      }
+        ),
+      );
+      return;
+    }
 
-      return new Set([
-        ...current,
-        ...images.map((image) => image.pathname),
-      ]);
-    });
+    setSelectedFolderPathnames(
+      (current) =>
+        new Set([
+          ...current,
+          ...folders.map((folder) => folder.pathname),
+        ]),
+    );
+    setSelectedImagePathnames(
+      (current) =>
+        new Set([
+          ...current,
+          ...images.map((image) => image.pathname),
+        ]),
+    );
   }
 
   async function copyImageUrl(pathname: string) {
@@ -420,12 +462,14 @@ export default function App() {
   }
 
   async function handleDeleteSelected() {
-    if (selectedImagePathnames.size === 0) return;
+    if (selectedCount === 0) return;
 
+    const selectedFolderPathnamesList = [...selectedFolderPathnames];
     const selectedPathnames = [...selectedImagePathnames];
     const confirmed = window.confirm(
-      `Delete ${selectedPathnames.length} selected image${selectedPathnames.length === 1 ? '' : 's'
-      }?`,
+      `Delete ${selectedCount} selected item${
+        selectedCount === 1 ? '' : 's'
+      }? Selected folders and all of their contents will be deleted.`,
     );
 
     if (!confirmed) return;
@@ -440,7 +484,10 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ pathnames: selectedPathnames }),
+        body: JSON.stringify({
+          folderPathnames: selectedFolderPathnamesList,
+          pathnames: selectedPathnames,
+        }),
       });
 
       const result = (await response.json()) as DeleteResponse;
@@ -454,6 +501,12 @@ export default function App() {
           (image) => !selectedImagePathnames.has(image.pathname),
         ),
       );
+      setFolders((current) =>
+        current.filter(
+          (folder) => !selectedFolderPathnames.has(folder.pathname),
+        ),
+      );
+      setSelectedFolderPathnames(new Set());
       setSelectedImagePathnames(new Set());
 
       await loadImages({ reset: true });
@@ -1087,7 +1140,7 @@ export default function App() {
                 flexWrap: 'wrap',
               }}
             >
-              {images.length > 0 && (
+              {visibleItemCount > 0 && (
                 <label
                   style={{
                     display: 'flex',
@@ -1099,7 +1152,7 @@ export default function App() {
                 >
                   <input
                     type="checkbox"
-                    checked={allVisibleImagesSelected}
+                    checked={allVisibleItemsSelected}
                     onChange={toggleAllVisibleImages}
                   />
                   Select all
@@ -1155,22 +1208,23 @@ export default function App() {
               }}
             >
               {folders.map((folder) => (
-                <button
+                <article
                   key={folder.pathname}
-                  onClick={() => openFolder(folder.pathname)}
                   style={{
                     overflow: 'hidden',
                     minHeight: 170,
                     borderRadius: 16,
                     background: '#111827',
-                    border: '1px solid #334155',
+                    border: selectedFolderPathnames.has(folder.pathname)
+                      ? '1px solid #38bdf8'
+                      : '1px solid #334155',
                     color: '#f8fafc',
-                    cursor: 'pointer',
                     textAlign: 'left',
                   }}
                 >
                   <div
                     style={{
+                      position: 'relative',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1179,7 +1233,49 @@ export default function App() {
                       color: '#facc15',
                     }}
                   >
-                    <Folder size={52} strokeWidth={1.8} />
+                    <label
+                      style={{
+                        position: 'absolute',
+                        top: 10,
+                        left: 10,
+                        zIndex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: 'rgba(2, 6, 23, 0.82)',
+                        border: '1px solid #475569',
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${folder.pathname}`}
+                        checked={selectedFolderPathnames.has(folder.pathname)}
+                        onChange={() =>
+                          toggleFolderSelection(folder.pathname)
+                        }
+                      />
+                    </label>
+
+                    <button
+                      onClick={() => openFolder(folder.pathname)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '100%',
+                        height: '100%',
+                        border: 0,
+                        background: 'transparent',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Folder size={52} strokeWidth={1.8} />
+                    </button>
                   </div>
 
                   <div style={{ padding: 12 }}>
@@ -1206,7 +1302,7 @@ export default function App() {
                       Folder
                     </div>
                   </div>
-                </button>
+                </article>
               ))}
 
               {images.map((image) => (
