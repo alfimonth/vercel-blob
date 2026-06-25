@@ -27,7 +27,18 @@ export async function GET(request: Request) {
         size: blob.size,
         uploadedAt: blob.uploadedAt,
         previewUrl: `/api/file?pathname=${encodeURIComponent(blob.pathname)}`,
-      }));
+      }))
+      .sort((first, second) => {
+        const dateDifference =
+          new Date(second.uploadedAt).getTime() -
+          new Date(first.uploadedAt).getTime();
+
+        if (dateDifference !== 0) {
+          return dateDifference;
+        }
+
+        return second.pathname.localeCompare(first.pathname);
+      });
 
     return Response.json({
       images,

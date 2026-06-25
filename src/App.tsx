@@ -25,6 +25,21 @@ type ListResponse = {
   error?: string;
 };
 
+type CompressionStats = {
+  originalSize: number;
+  uploadSize: number;
+  compressed: boolean;
+  outputType: string;
+};
+
+const MAX_IMAGE_DIMENSION = 1600;
+const IMAGE_QUALITY = 0.82;
+const COMPRESSIBLE_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
 
@@ -35,9 +50,101 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
 }
 
+function replaceFileExtension(fileName: string, extension: string) {
+  return `${fileName.replace(/\.[^/.]+$/, '')}.${extension}`;
+}
+
+function loadImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to read selected image'));
+    };
+    image.src = url;
+  });
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+
+        reject(new Error('Failed to compress image'));
+      },
+      type,
+      quality,
+    );
+  });
+}
+
+async function compressImageFile(file: File) {
+  if (!COMPRESSIBLE_IMAGE_TYPES.has(file.type)) {
+    return { file, compressed: false };
+  }
+
+  const image = await loadImage(file);
+  const scale = Math.min(
+    1,
+    MAX_IMAGE_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight),
+  );
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Browser does not support image compression');
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+
+  const outputType = 'image/webp';
+  const compressedBlob = await canvasToBlob(
+    canvas,
+    outputType,
+    IMAGE_QUALITY,
+  );
+
+  if (compressedBlob.size >= file.size) {
+    return { file, compressed: false };
+  }
+
+  return {
+    file: new File(
+      [compressedBlob],
+      replaceFileExtension(file.name, 'webp'),
+      {
+        type: outputType,
+        lastModified: Date.now(),
+      },
+    ),
+    compressed: true,
+  };
+}
+
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [blob, setBlob] = useState<UploadedBlob | null>(null);
+  const [compressionStats, setCompressionStats] =
+    useState<CompressionStats | null>(null);
 
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
@@ -91,16 +198,27 @@ export default function App() {
     setUploading(true);
     setErrorMessage(null);
     setBlob(null);
+    setCompressionStats(null);
 
     try {
+      const compressionResult = await compressImageFile(file);
+      const uploadFile = compressionResult.file;
+
+      setCompressionStats({
+        originalSize: file.size,
+        uploadSize: uploadFile.size,
+        compressed: compressionResult.compressed,
+        outputType: uploadFile.type || file.type || 'application/octet-stream',
+      });
+
       const response = await fetch(
-        `/api/upload?filename=${encodeURIComponent(file.name)}`,
+        `/api/upload?filename=${encodeURIComponent(uploadFile.name)}`,
         {
           method: 'POST',
           headers: {
-            'Content-Type': file.type || 'application/octet-stream',
+            'Content-Type': uploadFile.type || 'application/octet-stream',
           },
-          body: file,
+          body: uploadFile,
         },
       );
 
@@ -174,6 +292,7 @@ export default function App() {
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null);
               setBlob(null);
+              setCompressionStats(null);
               setErrorMessage(null);
             }}
           />
@@ -233,7 +352,7 @@ export default function App() {
                 fontWeight: 700,
               }}
             >
-              {uploading ? 'Uploading...' : 'Upload Image'}
+              {uploading ? 'Compressing & uploading...' : 'Upload Image'}
             </button>
 
             <button
@@ -271,6 +390,27 @@ export default function App() {
               }}
             >
               Upload berhasil: <code>{blob.pathname}</code>
+            </div>
+          )}
+
+          {compressionStats && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 12,
+                background: '#082f49',
+                border: '1px solid #075985',
+                color: '#bae6fd',
+              }}
+            >
+              {compressionStats.compressed ? 'Compressed' : 'Uploaded original'}:{' '}
+              {formatBytes(compressionStats.originalSize)} →{' '}
+              {formatBytes(compressionStats.uploadSize)}
+              <span style={{ color: '#7dd3fc' }}>
+                {' '}
+                ({compressionStats.outputType})
+              </span>
             </div>
           )}
         </div>
