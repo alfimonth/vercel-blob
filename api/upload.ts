@@ -7,11 +7,27 @@ function sanitizeFileName(fileName: string) {
     .replace(/-+/g, '-');
 }
 
+function normalizeUploadPrefix(prefix: string | null) {
+  if (!prefix) return '';
+
+  const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+
+  if (
+    normalizedPrefix.startsWith('/') ||
+    normalizedPrefix.includes('..')
+  ) {
+    return '';
+  }
+
+  return normalizedPrefix;
+}
+
 export async function POST(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
     const filename = searchParams.get('filename');
+    const prefix = normalizeUploadPrefix(searchParams.get('prefix'));
 
     if (!filename) {
       return Response.json(
@@ -28,7 +44,7 @@ export async function POST(request: Request) {
     }
 
     const safeName = sanitizeFileName(filename);
-    const pathname = `uploads/${Date.now()}-${safeName}`;
+    const pathname = `${prefix}${Date.now()}-${safeName}`;
 
     const contentType =
       request.headers.get('content-type') ?? 'application/octet-stream';

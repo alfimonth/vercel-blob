@@ -4,19 +4,46 @@ function isImagePath(pathname: string) {
   return /\.(jpg|jpeg|png|webp|gif|avif|svg)$/i.test(pathname);
 }
 
+function normalizeUploadPrefix(prefix: string | null) {
+  if (!prefix) return '';
+
+  const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+
+  if (
+    normalizedPrefix.startsWith('/') ||
+    normalizedPrefix.includes('..')
+  ) {
+    return '';
+  }
+
+  return normalizedPrefix;
+}
+
+function getFolderName(pathname: string) {
+  return pathname.replace(/\/$/, '').split('/').at(-1) ?? pathname;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
     const cursor = searchParams.get('cursor') ?? undefined;
-    const prefix = searchParams.get('prefix') ?? 'uploads/';
+    const prefix = normalizeUploadPrefix(searchParams.get('prefix'));
 
     const result = await list({
       access: 'private',
       prefix,
       cursor,
       limit: 20,
+      mode: 'folded',
     });
+
+    const folders = result.folders
+      .map((pathname) => ({
+        pathname,
+        name: getFolderName(pathname),
+      }))
+      .sort((first, second) => first.name.localeCompare(second.name));
 
     const images = result.blobs
       .filter((blob) => isImagePath(blob.pathname))
@@ -41,6 +68,7 @@ export async function GET(request: Request) {
       });
 
     return Response.json({
+      folders,
       images,
       cursor: result.cursor,
       hasMore: result.hasMore,

@@ -1,4 +1,11 @@
-import { Check, Copy, Download } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Download,
+  Folder,
+  FolderPlus,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 type UploadedBlob = {
@@ -19,7 +26,13 @@ type GalleryImage = {
   previewUrl: string;
 };
 
+type GalleryFolder = {
+  pathname: string;
+  name: string;
+};
+
 type ListResponse = {
+  folders: GalleryFolder[];
   images: GalleryImage[];
   cursor?: string;
   hasMore: boolean;
@@ -40,6 +53,7 @@ type CompressionStats = {
 
 const MAX_IMAGE_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
+const ROOT_PREFIX = '';
 const COMPRESSIBLE_IMAGE_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -73,6 +87,22 @@ function getImageUrl(pathname: string, options?: { download?: boolean }) {
 
 function getAbsoluteImageUrl(pathname: string) {
   return new URL(getImageUrl(pathname), window.location.origin).toString();
+}
+
+function getParentPrefix(prefix: string) {
+  const parts = prefix.replace(/\/$/, '').split('/');
+
+  if (!prefix || parts.length <= 1) {
+    return ROOT_PREFIX;
+  }
+
+  return `${parts.slice(0, -1).join('/')}/`;
+}
+
+function formatDirectory(prefix: string) {
+  if (!prefix) return 'root';
+
+  return `root/${prefix.replace(/\/$/, '')}`;
 }
 
 function loadImage(file: File) {
@@ -167,6 +197,8 @@ export default function App() {
   const [compressionStats, setCompressionStats] =
     useState<CompressionStats | null>(null);
 
+  const [activePrefix, setActivePrefix] = useState(ROOT_PREFIX);
+  const [folders, setFolders] = useState<GalleryFolder[]>([]);
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [selectedImagePathnames, setSelectedImagePathnames] = useState<
     Set<string>
@@ -176,6 +208,7 @@ export default function App() {
 
   const [uploading, setUploading] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [deletingImages, setDeletingImages] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedImagePathname, setCopiedImagePathname] = useState<string | null>(
@@ -183,6 +216,7 @@ export default function App() {
   );
 
   const selectedCount = selectedImagePathnames.size;
+  const isRootDirectory = activePrefix === ROOT_PREFIX;
   const allVisibleImagesSelected =
     images.length > 0 &&
     images.every((image) => selectedImagePathnames.has(image.pathname));
@@ -203,13 +237,14 @@ export default function App() {
     0,
   );
 
-  async function loadImages(options?: { reset?: boolean }) {
+  async function loadImages(options?: { reset?: boolean; prefix?: string }) {
     setLoadingImages(true);
     setErrorMessage(null);
 
     try {
+      const prefix = options?.prefix ?? activePrefix;
       const params = new URLSearchParams();
-      params.set('prefix', 'uploads/');
+      params.set('prefix', prefix);
 
       if (!options?.reset && cursor) {
         params.set('cursor', cursor);
@@ -222,6 +257,7 @@ export default function App() {
         throw new Error(result.error || 'Failed to load images');
       }
 
+      setFolders(options?.reset ? result.folders : folders);
       setImages((current) =>
         options?.reset ? result.images : [...current, ...result.images],
       );
@@ -236,6 +272,57 @@ export default function App() {
       );
     } finally {
       setLoadingImages(false);
+    }
+  }
+
+  function openFolder(pathname: string) {
+    setActivePrefix(pathname);
+    setCursor(undefined);
+    void loadImages({ reset: true, prefix: pathname });
+  }
+
+  function goBackDirectory() {
+    const parentPrefix = getParentPrefix(activePrefix);
+    setActivePrefix(parentPrefix);
+    setCursor(undefined);
+    void loadImages({ reset: true, prefix: parentPrefix });
+  }
+
+  async function handleCreateFolder() {
+    const folderName = window.prompt('New folder name');
+
+    if (!folderName) return;
+
+    setCreatingFolder(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch('/api/create-folder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: folderName,
+          parentPrefix: activePrefix,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create folder');
+      }
+
+      await loadImages({ reset: true });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Failed to create folder',
+      );
+    } finally {
+      setCreatingFolder(false);
     }
   }
 
@@ -340,7 +427,9 @@ export default function App() {
     const uploadFile = compressionResult.file;
 
     const response = await fetch(
-      `/api/upload?filename=${encodeURIComponent(uploadFile.name)}`,
+      `/api/upload?filename=${encodeURIComponent(
+        uploadFile.name,
+      )}&prefix=${encodeURIComponent(activePrefix)}`,
       {
         method: 'POST',
         headers: {
@@ -450,21 +539,176 @@ export default function App() {
           <h1 style={{ marginTop: 0 }}>Vercel Blob Image Gallery</h1>
 
           <p style={{ color: '#cbd5e1' }}>
-            Upload gambar ke private Blob, lalu tampilkan semua gambar yang
-            sudah masuk.
+            Upload gambar ke private Blob pada folder yang sedang dibuka.
           </p>
 
-          <input
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml"
-            onChange={(event) => {
-              setFiles(Array.from(event.target.files ?? []));
-              setBlob(null);
-              setCompressionStats(null);
-              setErrorMessage(null);
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              marginTop: 16,
+              padding: 12,
+              borderRadius: 12,
+              background: '#1f2937',
+              color: '#d1d5db',
             }}
-          />
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                width: '100%',
+                minWidth: 0,
+              }}
+            >
+              <Folder size={18} color="#facc15" />
+
+              <div
+                title={formatDirectory(activePrefix)}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  background: '#020617',
+                  border: '1px solid #334155',
+                  color: '#e2e8f0',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: 13,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  textAlign: 'left',
+                }}
+              >
+                {formatDirectory(activePrefix)}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+                width: '100%',
+              }}
+            >
+              <button
+                onClick={goBackDirectory}
+                disabled={isRootDirectory || loadingImages}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #475569',
+                  cursor:
+                    isRootDirectory || loadingImages
+                      ? 'not-allowed'
+                      : 'pointer',
+                  background:
+                    isRootDirectory || loadingImages ? '#334155' : '#020617',
+                  color: '#f8fafc',
+                  fontWeight: 700,
+                }}
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+
+              <button
+                onClick={handleCreateFolder}
+                disabled={creatingFolder}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: 0,
+                  cursor: creatingFolder ? 'not-allowed' : 'pointer',
+                  background: creatingFolder ? '#475569' : '#22c55e',
+                  color: '#052e16',
+                  fontWeight: 700,
+                }}
+              >
+                <FolderPlus size={16} />
+                {creatingFolder ? 'Creating...' : 'New Folder'}
+              </button>
+
+              <label
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #475569',
+                  cursor: uploading ? 'not-allowed' : 'pointer',
+                  background: '#020617',
+                  color: '#f8fafc',
+                  fontWeight: 700,
+                }}
+              >
+                Choose File
+                <input
+                  type="file"
+                  multiple
+                  disabled={uploading}
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml"
+                  style={{ display: 'none' }}
+                  onChange={(event) => {
+                    setFiles(Array.from(event.target.files ?? []));
+                    setBlob(null);
+                    setCompressionStats(null);
+                    setErrorMessage(null);
+                  }}
+                />
+              </label>
+
+              <button
+                onClick={handleUpload}
+                disabled={files.length === 0 || uploading}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: 0,
+                  cursor:
+                    files.length === 0 || uploading
+                      ? 'not-allowed'
+                      : 'pointer',
+                  background:
+                    files.length === 0 || uploading ? '#475569' : '#38bdf8',
+                  color: '#0f172a',
+                  fontWeight: 700,
+                }}
+              >
+                {uploading
+                  ? 'Compressing & uploading...'
+                  : `Upload Image${files.length > 1 ? 's' : ''}`}
+              </button>
+
+              <button
+                onClick={() => loadImages({ reset: true })}
+                disabled={loadingImages}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #475569',
+                  cursor: loadingImages ? 'not-allowed' : 'pointer',
+                  background: '#020617',
+                  color: '#f8fafc',
+                  fontWeight: 700,
+                }}
+              >
+                {loadingImages ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
 
           {files.length > 0 && (
             <div
@@ -532,44 +776,6 @@ export default function App() {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-            <button
-              onClick={handleUpload}
-              disabled={files.length === 0 || uploading}
-              style={{
-                padding: '10px 16px',
-                borderRadius: 8,
-                border: 0,
-                cursor:
-                  files.length === 0 || uploading ? 'not-allowed' : 'pointer',
-                background:
-                  files.length === 0 || uploading ? '#475569' : '#38bdf8',
-                color: '#0f172a',
-                fontWeight: 700,
-              }}
-            >
-              {uploading
-                ? 'Compressing & uploading...'
-                : `Upload Image${files.length > 1 ? 's' : ''}`}
-            </button>
-
-            <button
-              onClick={() => loadImages({ reset: true })}
-              disabled={loadingImages}
-              style={{
-                padding: '10px 16px',
-                borderRadius: 8,
-                border: '1px solid #475569',
-                cursor: loadingImages ? 'not-allowed' : 'pointer',
-                background: '#020617',
-                color: '#f8fafc',
-                fontWeight: 700,
-              }}
-            >
-              {loadingImages ? 'Refreshing...' : 'Refresh Gallery'}
-            </button>
-          </div>
-
           {errorMessage && (
             <p style={{ marginTop: 16, color: '#fca5a5' }}>
               {errorMessage}
@@ -634,6 +840,7 @@ export default function App() {
               }}
             >
               <span style={{ color: '#cbd5e1' }}>
+                {folders.length} folder{folders.length === 1 ? '' : 's'} ·{' '}
                 {images.length} image{images.length === 1 ? '' : 's'}
               </span>
 
@@ -678,9 +885,9 @@ export default function App() {
             </div>
           </div>
 
-          {loadingImages && images.length === 0 ? (
+          {loadingImages && folders.length === 0 && images.length === 0 ? (
             <p style={{ color: '#cbd5e1' }}>Loading images...</p>
-          ) : images.length === 0 ? (
+          ) : folders.length === 0 && images.length === 0 ? (
             <div
               style={{
                 marginTop: 16,
@@ -692,7 +899,7 @@ export default function App() {
                 textAlign: 'center',
               }}
             >
-              Belum ada gambar di folder uploads/.
+              Folder ini masih kosong.
             </div>
           ) : (
             <div
@@ -703,6 +910,61 @@ export default function App() {
                 gap: 16,
               }}
             >
+              {folders.map((folder) => (
+                <button
+                  key={folder.pathname}
+                  onClick={() => openFolder(folder.pathname)}
+                  style={{
+                    overflow: 'hidden',
+                    minHeight: 170,
+                    borderRadius: 16,
+                    background: '#111827',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      aspectRatio: '1 / 1',
+                      background: '#020617',
+                      color: '#facc15',
+                    }}
+                  >
+                    <Folder size={52} strokeWidth={1.8} />
+                  </div>
+
+                  <div style={{ padding: 12 }}>
+                    <div
+                      title={folder.pathname}
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {folder.name}
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 12,
+                        color: '#94a3b8',
+                      }}
+                    >
+                      Folder
+                    </div>
+                  </div>
+                </button>
+              ))}
+
               {images.map((image) => (
                 <article
                   key={image.pathname}
@@ -781,7 +1043,7 @@ export default function App() {
                         textOverflow: 'ellipsis',
                       }}
                     >
-                      {image.pathname.replace('uploads/', '')}
+                      {image.pathname.split('/').at(-1)}
                     </div>
 
                     <div
@@ -815,7 +1077,7 @@ export default function App() {
                         href={getImageUrl(image.pathname, {
                           download: true,
                         })}
-                        download={image.pathname.replace('uploads/', '')}
+                        download={image.pathname.split('/').at(-1)}
                         className="image-action-button image-tooltip"
                         aria-label="Download image"
                       >

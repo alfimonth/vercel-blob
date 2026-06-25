@@ -7,7 +7,8 @@ type DeleteRequestBody = {
 function isValidUploadPath(pathname: unknown): pathname is string {
   return (
     typeof pathname === 'string' &&
-    pathname.startsWith('uploads/') &&
+    pathname.length > 0 &&
+    !pathname.startsWith('/') &&
     !pathname.includes('..')
   );
 }
