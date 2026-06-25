@@ -25,6 +25,11 @@ type ListResponse = {
   error?: string;
 };
 
+type DeleteResponse = {
+  deleted?: number;
+  error?: string;
+};
+
 type CompressionStats = {
   originalSize: number;
   uploadSize: number;
@@ -147,12 +152,21 @@ export default function App() {
     useState<CompressionStats | null>(null);
 
   const [images, setImages] = useState<GalleryImage[]>([]);
+  const [selectedImagePathnames, setSelectedImagePathnames] = useState<
+    Set<string>
+  >(new Set());
   const [cursor, setCursor] = useState<string | undefined>();
   const [hasMore, setHasMore] = useState(false);
 
   const [uploading, setUploading] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
+  const [deletingImages, setDeletingImages] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const selectedCount = selectedImagePathnames.size;
+  const allVisibleImagesSelected =
+    images.length > 0 &&
+    images.every((image) => selectedImagePathnames.has(image.pathname));
 
   const selectedFilePreview = useMemo(() => {
     if (!file || !file.type.startsWith('image/')) return null;
@@ -181,6 +195,9 @@ export default function App() {
       setImages((current) =>
         options?.reset ? result.images : [...current, ...result.images],
       );
+      if (options?.reset) {
+        setSelectedImagePathnames(new Set());
+      }
       setCursor(result.cursor);
       setHasMore(result.hasMore);
     } catch (error) {
@@ -189,6 +206,86 @@ export default function App() {
       );
     } finally {
       setLoadingImages(false);
+    }
+  }
+
+  function toggleImageSelection(pathname: string) {
+    setSelectedImagePathnames((current) => {
+      const next = new Set(current);
+
+      if (next.has(pathname)) {
+        next.delete(pathname);
+      } else {
+        next.add(pathname);
+      }
+
+      return next;
+    });
+  }
+
+  function toggleAllVisibleImages() {
+    setSelectedImagePathnames((current) => {
+      if (allVisibleImagesSelected) {
+        return new Set(
+          [...current].filter(
+            (pathname) =>
+              !images.some((image) => image.pathname === pathname),
+          ),
+        );
+      }
+
+      return new Set([
+        ...current,
+        ...images.map((image) => image.pathname),
+      ]);
+    });
+  }
+
+  async function handleDeleteSelected() {
+    if (selectedImagePathnames.size === 0) return;
+
+    const selectedPathnames = [...selectedImagePathnames];
+    const confirmed = window.confirm(
+      `Delete ${selectedPathnames.length} selected image${
+        selectedPathnames.length === 1 ? '' : 's'
+      }?`,
+    );
+
+    if (!confirmed) return;
+
+    setDeletingImages(true);
+    setErrorMessage(null);
+    setBlob(null);
+
+    try {
+      const response = await fetch('/api/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pathnames: selectedPathnames }),
+      });
+
+      const result = (await response.json()) as DeleteResponse;
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Delete failed');
+      }
+
+      setImages((current) =>
+        current.filter(
+          (image) => !selectedImagePathnames.has(image.pathname),
+        ),
+      );
+      setSelectedImagePathnames(new Set());
+
+      await loadImages({ reset: true });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Delete failed',
+      );
+    } finally {
+      setDeletingImages(false);
     }
   }
 
@@ -422,13 +519,62 @@ export default function App() {
               justifyContent: 'space-between',
               alignItems: 'center',
               gap: 16,
+              flexWrap: 'wrap',
             }}
           >
             <h2 style={{ margin: 0 }}>Uploaded Images</h2>
 
-            <span style={{ color: '#cbd5e1' }}>
-              {images.length} image{images.length === 1 ? '' : 's'}
-            </span>
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ color: '#cbd5e1' }}>
+                {images.length} image{images.length === 1 ? '' : 's'}
+              </span>
+
+              {images.length > 0 && (
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    color: '#cbd5e1',
+                    fontSize: 14,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allVisibleImagesSelected}
+                    onChange={toggleAllVisibleImages}
+                  />
+                  Select all
+                </label>
+              )}
+
+              {selectedCount > 0 && (
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={deletingImages}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: 0,
+                    cursor: deletingImages ? 'not-allowed' : 'pointer',
+                    background: deletingImages ? '#475569' : '#ef4444',
+                    color: '#fff',
+                    fontWeight: 700,
+                  }}
+                >
+                  {deletingImages
+                    ? 'Deleting...'
+                    : `Delete checked (${selectedCount})`}
+                </button>
+              )}
+            </div>
           </div>
 
           {loadingImages && images.length === 0 ? (
@@ -463,31 +609,65 @@ export default function App() {
                     overflow: 'hidden',
                     borderRadius: 16,
                     background: '#111827',
-                    border: '1px solid #334155',
+                    border: selectedImagePathnames.has(image.pathname)
+                      ? '1px solid #38bdf8'
+                      : '1px solid #334155',
                   }}
                 >
-                  <a
-                    href={image.previewUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                  <div
                     style={{
-                      display: 'block',
+                      position: 'relative',
                       aspectRatio: '1 / 1',
                       background: '#020617',
                     }}
                   >
-                    <img
-                      src={image.previewUrl}
-                      alt={image.pathname}
-                      loading="lazy"
+                    <label
                       style={{
+                        position: 'absolute',
+                        top: 10,
+                        left: 10,
+                        zIndex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: 'rgba(2, 6, 23, 0.82)',
+                        border: '1px solid #475569',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${image.pathname}`}
+                        checked={selectedImagePathnames.has(image.pathname)}
+                        onChange={() => toggleImageSelection(image.pathname)}
+                      />
+                    </label>
+
+                    <a
+                      href={image.previewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'block',
                         width: '100%',
                         height: '100%',
-                        objectFit: 'cover',
-                        display: 'block',
                       }}
-                    />
-                  </a>
+                    >
+                      <img
+                        src={image.previewUrl}
+                        alt={image.pathname}
+                        loading="lazy"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                      />
+                    </a>
+                  </div>
 
                   <div style={{ padding: 12 }}>
                     <div
