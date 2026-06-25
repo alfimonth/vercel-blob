@@ -5,8 +5,13 @@ import {
   Download,
   Folder,
   FolderPlus,
+  RefreshCcw,
+  RefreshCw,
+  Upload,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import type { DragEvent } from 'react';
 
 type UploadedBlob = {
   url: string;
@@ -206,6 +211,8 @@ export default function App() {
   const [cursor, setCursor] = useState<string | undefined>();
   const [hasMore, setHasMore] = useState(false);
 
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [loadingImages, setLoadingImages] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -236,6 +243,44 @@ export default function App() {
     (totalSize, file) => totalSize + file.size,
     0,
   );
+
+  function setSelectedFiles(fileList: FileList | File[]) {
+    setFiles(Array.from(fileList));
+    setBlob(null);
+    setCompressionStats(null);
+    setErrorMessage(null);
+  }
+
+  function closeUploadModal() {
+    if (uploading) return;
+
+    setUploadModalOpen(false);
+    setDraggingFiles(false);
+    setFiles([]);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDraggingFiles(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDraggingFiles(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDraggingFiles(false);
+
+    const droppedFiles = Array.from(event.dataTransfer.files).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+
+    if (droppedFiles.length > 0) {
+      setSelectedFiles(droppedFiles);
+    }
+  }
 
   async function loadImages(options?: { reset?: boolean; prefix?: string }) {
     setLoadingImages(true);
@@ -379,8 +424,7 @@ export default function App() {
 
     const selectedPathnames = [...selectedImagePathnames];
     const confirmed = window.confirm(
-      `Delete ${selectedPathnames.length} selected image${
-        selectedPathnames.length === 1 ? '' : 's'
+      `Delete ${selectedPathnames.length} selected image${selectedPathnames.length === 1 ? '' : 's'
       }?`,
     );
 
@@ -487,6 +531,7 @@ export default function App() {
 
       setBlob(uploadResults.at(-1)?.blob ?? null);
       setFiles([]);
+      setUploadModalOpen(false);
 
       await loadImages({ reset: true });
     } catch (error) {
@@ -518,7 +563,7 @@ export default function App() {
         padding: 40,
         fontFamily:
           'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        background: '#0f172a',
+        // background: '#0f172a',
         color: '#f8fafc',
       }}
     >
@@ -529,30 +574,24 @@ export default function App() {
         }}
       >
         <div
-          style={{
-            padding: 24,
-            borderRadius: 16,
-            background: '#111827',
-            border: '1px solid #334155',
-          }}
         >
-          <h1 style={{ marginTop: 0 }}>Vercel Blob Image Gallery</h1>
+          <h1 style={{ marginTop: 0 }}>Webp Assets</h1>
 
-          <p style={{ color: '#cbd5e1' }}>
+          {/* <p style={{ color: '#cbd5e1' }}>
             Upload gambar ke private Blob pada folder yang sedang dibuka.
-          </p>
+          </p> */}
 
           <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              marginTop: 16,
-              padding: 12,
-              borderRadius: 12,
-              background: '#1f2937',
-              color: '#d1d5db',
-            }}
+          // style={{
+          //   display: 'flex',
+          //   flexDirection: 'column',
+          //   gap: 12,
+          //   marginTop: 16,
+          //   padding: 12,
+          //   borderRadius: 12,
+          //   background: '#1f2937',
+          //   color: '#d1d5db',
+          // }}
           >
             <div
               style={{
@@ -563,14 +602,37 @@ export default function App() {
                 minWidth: 0,
               }}
             >
-              <Folder size={18} color="#facc15" />
+              {/* <Folder size={18} color="#facc15" /> */}
+              <button
+                onClick={goBackDirectory}
+                disabled={isRootDirectory || loadingImages}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px',
+                  borderRadius: 8,
+                  border: '1px solid #475569',
+                  cursor:
+                    isRootDirectory || loadingImages
+                      ? 'not-allowed'
+                      : 'pointer',
+                  background:
+                    isRootDirectory || loadingImages ? '#334155' : '#020617',
+                  color: '#f8fafc',
+                  fontWeight: 700,
+                }}
+              >
+                <ArrowLeft size={16} />
+              </button>
 
               <div
                 title={formatDirectory(activePrefix)}
                 style={{
                   flex: 1,
                   minWidth: 0,
-                  padding: '8px 10px',
+                  padding: '9px 10px',
+                  lineHeight: '16px',
                   borderRadius: 8,
                   background: '#020617',
                   border: '1px solid #334155',
@@ -585,193 +647,320 @@ export default function App() {
               >
                 {formatDirectory(activePrefix)}
               </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                flexWrap: 'wrap',
-                width: '100%',
-              }}
-            >
-              <button
-                onClick={goBackDirectory}
-                disabled={isRootDirectory || loadingImages}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '9px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #475569',
-                  cursor:
-                    isRootDirectory || loadingImages
-                      ? 'not-allowed'
-                      : 'pointer',
-                  background:
-                    isRootDirectory || loadingImages ? '#334155' : '#020617',
-                  color: '#f8fafc',
-                  fontWeight: 700,
-                }}
-              >
-                <ArrowLeft size={16} />
-                Back
-              </button>
-
-              <button
-                onClick={handleCreateFolder}
-                disabled={creatingFolder}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '9px 12px',
-                  borderRadius: 8,
-                  border: 0,
-                  cursor: creatingFolder ? 'not-allowed' : 'pointer',
-                  background: creatingFolder ? '#475569' : '#22c55e',
-                  color: '#052e16',
-                  fontWeight: 700,
-                }}
-              >
-                <FolderPlus size={16} />
-                {creatingFolder ? 'Creating...' : 'New Folder'}
-              </button>
-
-              <label
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '9px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #475569',
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                  background: '#020617',
-                  color: '#f8fafc',
-                  fontWeight: 700,
-                }}
-              >
-                Choose File
-                <input
-                  type="file"
-                  multiple
-                  disabled={uploading}
-                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml"
-                  style={{ display: 'none' }}
-                  onChange={(event) => {
-                    setFiles(Array.from(event.target.files ?? []));
-                    setBlob(null);
-                    setCompressionStats(null);
-                    setErrorMessage(null);
-                  }}
-                />
-              </label>
-
-              <button
-                onClick={handleUpload}
-                disabled={files.length === 0 || uploading}
-                style={{
-                  padding: '9px 12px',
-                  borderRadius: 8,
-                  border: 0,
-                  cursor:
-                    files.length === 0 || uploading
-                      ? 'not-allowed'
-                      : 'pointer',
-                  background:
-                    files.length === 0 || uploading ? '#475569' : '#38bdf8',
-                  color: '#0f172a',
-                  fontWeight: 700,
-                }}
-              >
-                {uploading
-                  ? 'Compressing & uploading...'
-                  : `Upload Image${files.length > 1 ? 's' : ''}`}
-              </button>
 
               <button
                 onClick={() => loadImages({ reset: true })}
                 disabled={loadingImages}
                 style={{
-                  padding: '9px 12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px',
                   borderRadius: 8,
                   border: '1px solid #475569',
                   cursor: loadingImages ? 'not-allowed' : 'pointer',
                   background: '#020617',
                   color: '#f8fafc',
-                  fontWeight: 700,
                 }}
               >
-                {loadingImages ? 'Refreshing...' : 'Refresh'}
+                {loadingImages ? <RefreshCcw style={{
+                  animation: 'spin 1s linear infinite'
+                }} size={16} /> : <RefreshCw size={16} />}
               </button>
             </div>
+
           </div>
 
-          {files.length > 0 && (
+          {uploadModalOpen && (
             <div
               style={{
-                marginTop: 16,
+                position: 'fixed',
+                inset: 0,
+                zIndex: 20,
                 display: 'flex',
-                gap: 16,
-                alignItems: 'flex-start',
-                padding: 12,
-                borderRadius: 12,
-                background: '#1f2937',
-                color: '#d1d5db',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 20,
+                background: 'rgba(2, 6, 23, 0.72)',
+                backdropFilter: 'blur(8px)',
               }}
             >
-              {selectedFilePreviews.length > 0 && (
+              <div
+                style={{
+                  width: 'min(640px, 100%)',
+                  maxHeight: 'min(760px, calc(100vh - 40px))',
+                  overflow: 'auto',
+                  borderRadius: 16,
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  boxShadow: '0 24px 80px rgba(0, 0, 0, 0.45)',
+                  textAlign: 'left',
+                }}
+              >
                 <div
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, 72px)',
-                    gap: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 16,
+                    padding: '18px 20px',
+                    borderBottom: '1px solid #334155',
                   }}
                 >
-                  {selectedFilePreviews.slice(0, 4).map((preview, index) => (
-                    <img
-                      key={`${preview.file.name}-${preview.file.lastModified}`}
-                      src={preview.url}
-                      alt={`Selected preview ${index + 1}`}
+                  <div>
+                    <h2
                       style={{
-                        width: 72,
-                        height: 72,
-                        objectFit: 'cover',
-                        borderRadius: 10,
+                        margin: 0,
+                        color: '#f8fafc',
+                        fontSize: 20,
+                      }}
+                    >
+                      Upload images
+                    </h2>
+                    <div
+                      title={formatDirectory(activePrefix)}
+                      style={{
+                        marginTop: 4,
+                        color: '#94a3b8',
+                        fontSize: 13,
+                        fontFamily:
+                          'ui-monospace, SFMono-Regular, Menlo, monospace',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {formatDirectory(activePrefix)}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={closeUploadModal}
+                    disabled={uploading}
+                    aria-label="Close upload modal"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      border: '1px solid #475569',
+                      background: '#020617',
+                      color: '#f8fafc',
+                      cursor: uploading ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div style={{ padding: 20 }}>
+                  <label
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: 220,
+                      padding: 24,
+                      borderRadius: 14,
+                      border: draggingFiles
+                        ? '1px solid #38bdf8'
+                        : '1px dashed #475569',
+                      background: draggingFiles ? '#082f49' : '#111827',
+                      color: '#e2e8f0',
+                      cursor: uploading ? 'not-allowed' : 'pointer',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 54,
+                        height: 54,
+                        borderRadius: 14,
+                        background: '#020617',
                         border: '1px solid #334155',
+                        color: '#38bdf8',
+                      }}
+                    >
+                      <Upload size={26} />
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 14,
+                        fontSize: 18,
+                        fontWeight: 700,
+                        color: '#f8fafc',
+                      }}
+                    >
+                      Drop images here
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 6,
+                        color: '#94a3b8',
+                        fontSize: 14,
+                      }}
+                    >
+                      JPEG, PNG, WebP, GIF, AVIF, or SVG
+                    </div>
+
+                    <span
+                      style={{
+                        marginTop: 16,
+                        padding: '9px 12px',
+                        borderRadius: 8,
+                        background: '#38bdf8',
+                        color: '#0f172a',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Choose files
+                    </span>
+
+                    <input
+                      type="file"
+                      multiple
+                      disabled={uploading}
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml"
+                      style={{ display: 'none' }}
+                      onChange={(event) => {
+                        setSelectedFiles(event.target.files ?? []);
                       }}
                     />
-                  ))}
-                </div>
-              )}
+                  </label>
 
-              <div>
-                <div>
-                  <strong>Selected:</strong> {files.length} file
-                  {files.length === 1 ? '' : 's'}
-                </div>
-                <div>
-                  <strong>Total size:</strong> {formatBytes(selectedFilesSize)}
-                </div>
-                <ul
-                  style={{
-                    margin: '8px 0 0',
-                    paddingLeft: 18,
-                    color: '#cbd5e1',
-                  }}
-                >
-                  {files.slice(0, 5).map((selectedFile) => (
-                    <li key={`${selectedFile.name}-${selectedFile.lastModified}`}>
-                      {selectedFile.name} ({formatBytes(selectedFile.size)})
-                    </li>
-                  ))}
-                  {files.length > 5 && (
-                    <li>{files.length - 5} more file(s)</li>
+                  {files.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 16,
+                        display: 'flex',
+                        gap: 16,
+                        alignItems: 'flex-start',
+                        padding: 12,
+                        borderRadius: 12,
+                        background: '#111827',
+                        border: '1px solid #334155',
+                        color: '#d1d5db',
+                      }}
+                    >
+                      {selectedFilePreviews.length > 0 && (
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(2, 72px)',
+                            gap: 8,
+                          }}
+                        >
+                          {selectedFilePreviews
+                            .slice(0, 4)
+                            .map((preview, index) => (
+                              <img
+                                key={`${preview.file.name}-${preview.file.lastModified}`}
+                                src={preview.url}
+                                alt={`Selected preview ${index + 1}`}
+                                style={{
+                                  width: 72,
+                                  height: 72,
+                                  objectFit: 'cover',
+                                  borderRadius: 10,
+                                  border: '1px solid #334155',
+                                }}
+                              />
+                            ))}
+                        </div>
+                      )}
+
+                      <div style={{ minWidth: 0 }}>
+                        <div>
+                          <strong>Selected:</strong> {files.length} file
+                          {files.length === 1 ? '' : 's'}
+                        </div>
+                        <div>
+                          <strong>Total size:</strong>{' '}
+                          {formatBytes(selectedFilesSize)}
+                        </div>
+                        <ul
+                          style={{
+                            margin: '8px 0 0',
+                            paddingLeft: 18,
+                            color: '#cbd5e1',
+                          }}
+                        >
+                          {files.slice(0, 5).map((selectedFile) => (
+                            <li
+                              key={`${selectedFile.name}-${selectedFile.lastModified}`}
+                            >
+                              {selectedFile.name} (
+                              {formatBytes(selectedFile.size)})
+                            </li>
+                          ))}
+                          {files.length > 5 && (
+                            <li>{files.length - 5} more file(s)</li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
                   )}
-                </ul>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: 10,
+                      marginTop: 18,
+                    }}
+                  >
+                    <button
+                      onClick={closeUploadModal}
+                      disabled={uploading}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        border: '1px solid #475569',
+                        background: '#020617',
+                        color: '#f8fafc',
+                        cursor: uploading ? 'not-allowed' : 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      onClick={handleUpload}
+                      disabled={files.length === 0 || uploading}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        border: 0,
+                        background:
+                          files.length === 0 || uploading
+                            ? '#475569'
+                            : '#38bdf8',
+                        color: '#0f172a',
+                        cursor:
+                          files.length === 0 || uploading
+                            ? 'not-allowed'
+                            : 'pointer',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {uploading
+                        ? 'Compressing & uploading...'
+                        : `Upload Image${files.length > 1 ? 's' : ''}`}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -820,16 +1009,75 @@ export default function App() {
         </div>
 
         <div style={{ marginTop: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#cbd5e1' }}>
+              {folders.length} folder{folders.length === 1 ? '' : 's'} ·{' '}
+              {images.length} image{images.length === 1 ? '' : 's'}
+            </span>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+              }}
+            >
+
+
+              <button
+                onClick={handleCreateFolder}
+                disabled={creatingFolder}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: 0,
+                  cursor: creatingFolder ? 'not-allowed' : 'pointer',
+                  background: creatingFolder ? '#475569' : '#22c55e',
+                  color: '#052e16',
+                  fontWeight: 700,
+                }}
+              >
+                <FolderPlus size={16} />
+                {creatingFolder ? 'Creating...' : 'New Folder'}
+              </button>
+
+              <button
+                onClick={() => setUploadModalOpen(true)}
+                disabled={uploading}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: 0,
+                  cursor: uploading ? 'not-allowed' : 'pointer',
+                  background: uploading ? '#475569' : '#38bdf8',
+                  color: '#0f172a',
+                  fontWeight: 700,
+                }}
+              >
+                <Upload size={16} />
+                {uploading ? 'Uploading...' : 'Upload'}
+              </button>
+            </div>
+          </div>
+
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              marginTop: 24,
               gap: 16,
               flexWrap: 'wrap',
             }}
           >
-            <h2 style={{ margin: 0 }}>Uploaded Images</h2>
+            {/* <h2 style={{ margin: 0 }}>Uploaded Images</h2> */}
 
             <div
               style={{
@@ -839,11 +1087,6 @@ export default function App() {
                 flexWrap: 'wrap',
               }}
             >
-              <span style={{ color: '#cbd5e1' }}>
-                {folders.length} folder{folders.length === 1 ? '' : 's'} ·{' '}
-                {images.length} image{images.length === 1 ? '' : 's'}
-              </span>
-
               {images.length > 0 && (
                 <label
                   style={{
@@ -863,26 +1106,27 @@ export default function App() {
                 </label>
               )}
 
-              {selectedCount > 0 && (
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={deletingImages}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: 0,
-                    cursor: deletingImages ? 'not-allowed' : 'pointer',
-                    background: deletingImages ? '#475569' : '#ef4444',
-                    color: '#fff',
-                    fontWeight: 700,
-                  }}
-                >
-                  {deletingImages
-                    ? 'Deleting...'
-                    : `Delete checked (${selectedCount})`}
-                </button>
-              )}
+
             </div>
+            {selectedCount > 0 && (
+              <button
+                onClick={handleDeleteSelected}
+                disabled={deletingImages}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: 0,
+                  cursor: deletingImages ? 'not-allowed' : 'pointer',
+                  background: deletingImages ? '#475569' : '#ef4444',
+                  color: '#fff',
+                  fontWeight: 700,
+                }}
+              >
+                {deletingImages
+                  ? 'Deleting...'
+                  : `Delete checked (${selectedCount})`}
+              </button>
+            )}
           </div>
 
           {loadingImages && folders.length === 0 && images.length === 0 ? (
@@ -1087,11 +1331,10 @@ export default function App() {
 
                       <button
                         onClick={() => copyImageUrl(image.pathname)}
-                        className={`image-action-button image-tooltip${
-                          copiedImagePathname === image.pathname
-                            ? ' image-action-button-copied'
-                            : ''
-                        }`}
+                        className={`image-action-button image-tooltip${copiedImagePathname === image.pathname
+                          ? ' image-action-button-copied'
+                          : ''
+                          }`}
                         aria-label="Copy image URL"
                       >
                         {copiedImagePathname === image.pathname ? (
