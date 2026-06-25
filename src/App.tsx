@@ -146,7 +146,7 @@ async function compressImageFile(file: File) {
 }
 
 export default function App() {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [blob, setBlob] = useState<UploadedBlob | null>(null);
   const [compressionStats, setCompressionStats] =
     useState<CompressionStats | null>(null);
@@ -168,10 +168,21 @@ export default function App() {
     images.length > 0 &&
     images.every((image) => selectedImagePathnames.has(image.pathname));
 
-  const selectedFilePreview = useMemo(() => {
-    if (!file || !file.type.startsWith('image/')) return null;
-    return URL.createObjectURL(file);
-  }, [file]);
+  const selectedFilePreviews = useMemo(
+    () =>
+      files
+        .filter((file) => file.type.startsWith('image/'))
+        .map((file) => ({
+          file,
+          url: URL.createObjectURL(file),
+        })),
+    [files],
+  );
+
+  const selectedFilesSize = files.reduce(
+    (totalSize, file) => totalSize + file.size,
+    0,
+  );
 
   async function loadImages(options?: { reset?: boolean }) {
     setLoadingImages(true);
@@ -289,8 +300,38 @@ export default function App() {
     }
   }
 
+  async function uploadImage(file: File) {
+    const compressionResult = await compressImageFile(file);
+    const uploadFile = compressionResult.file;
+
+    const response = await fetch(
+      `/api/upload?filename=${encodeURIComponent(uploadFile.name)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': uploadFile.type || 'application/octet-stream',
+        },
+        body: uploadFile,
+      },
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || `Upload failed: ${file.name}`);
+    }
+
+    return {
+      blob: result as UploadedBlob,
+      compressed: compressionResult.compressed,
+      originalSize: file.size,
+      uploadSize: uploadFile.size,
+      outputType: uploadFile.type || file.type || 'application/octet-stream',
+    };
+  }
+
   async function handleUpload() {
-    if (!file) return;
+    if (files.length === 0) return;
 
     setUploading(true);
     setErrorMessage(null);
@@ -298,35 +339,30 @@ export default function App() {
     setCompressionStats(null);
 
     try {
-      const compressionResult = await compressImageFile(file);
-      const uploadFile = compressionResult.file;
+      const uploadResults = [];
 
-      setCompressionStats({
-        originalSize: file.size,
-        uploadSize: uploadFile.size,
-        compressed: compressionResult.compressed,
-        outputType: uploadFile.type || file.type || 'application/octet-stream',
-      });
-
-      const response = await fetch(
-        `/api/upload?filename=${encodeURIComponent(uploadFile.name)}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': uploadFile.type || 'application/octet-stream',
-          },
-          body: uploadFile,
-        },
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Upload failed');
+      for (const selectedFile of files) {
+        uploadResults.push(await uploadImage(selectedFile));
       }
 
-      setBlob(result);
-      setFile(null);
+      setCompressionStats({
+        originalSize: uploadResults.reduce(
+          (totalSize, result) => totalSize + result.originalSize,
+          0,
+        ),
+        uploadSize: uploadResults.reduce(
+          (totalSize, result) => totalSize + result.uploadSize,
+          0,
+        ),
+        compressed: uploadResults.some((result) => result.compressed),
+        outputType:
+          uploadResults.length === 1
+            ? uploadResults[0].outputType
+            : `${uploadResults.length} files`,
+      });
+
+      setBlob(uploadResults.at(-1)?.blob ?? null);
+      setFiles([]);
 
       await loadImages({ reset: true });
     } catch (error) {
@@ -345,11 +381,11 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (selectedFilePreview) {
-        URL.revokeObjectURL(selectedFilePreview);
-      }
+      selectedFilePreviews.forEach((preview) => {
+        URL.revokeObjectURL(preview.url);
+      });
     };
-  }, [selectedFilePreview]);
+  }, [selectedFilePreviews]);
 
   return (
     <main
@@ -385,52 +421,78 @@ export default function App() {
 
           <input
             type="file"
+            multiple
             accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml"
             onChange={(event) => {
-              setFile(event.target.files?.[0] ?? null);
+              setFiles(Array.from(event.target.files ?? []));
               setBlob(null);
               setCompressionStats(null);
               setErrorMessage(null);
             }}
           />
 
-          {file && (
+          {files.length > 0 && (
             <div
               style={{
                 marginTop: 16,
                 display: 'flex',
                 gap: 16,
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 padding: 12,
                 borderRadius: 12,
                 background: '#1f2937',
                 color: '#d1d5db',
               }}
             >
-              {selectedFilePreview && (
-                <img
-                  src={selectedFilePreview}
-                  alt="Selected preview"
+              {selectedFilePreviews.length > 0 && (
+                <div
                   style={{
-                    width: 72,
-                    height: 72,
-                    objectFit: 'cover',
-                    borderRadius: 10,
-                    border: '1px solid #334155',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 72px)',
+                    gap: 8,
                   }}
-                />
+                >
+                  {selectedFilePreviews.slice(0, 4).map((preview, index) => (
+                    <img
+                      key={`${preview.file.name}-${preview.file.lastModified}`}
+                      src={preview.url}
+                      alt={`Selected preview ${index + 1}`}
+                      style={{
+                        width: 72,
+                        height: 72,
+                        objectFit: 'cover',
+                        borderRadius: 10,
+                        border: '1px solid #334155',
+                      }}
+                    />
+                  ))}
+                </div>
               )}
 
               <div>
                 <div>
-                  <strong>Selected:</strong> {file.name}
+                  <strong>Selected:</strong> {files.length} file
+                  {files.length === 1 ? '' : 's'}
                 </div>
                 <div>
-                  <strong>Type:</strong> {file.type || '-'}
+                  <strong>Total size:</strong> {formatBytes(selectedFilesSize)}
                 </div>
-                <div>
-                  <strong>Size:</strong> {formatBytes(file.size)}
-                </div>
+                <ul
+                  style={{
+                    margin: '8px 0 0',
+                    paddingLeft: 18,
+                    color: '#cbd5e1',
+                  }}
+                >
+                  {files.slice(0, 5).map((selectedFile) => (
+                    <li key={`${selectedFile.name}-${selectedFile.lastModified}`}>
+                      {selectedFile.name} ({formatBytes(selectedFile.size)})
+                    </li>
+                  ))}
+                  {files.length > 5 && (
+                    <li>{files.length - 5} more file(s)</li>
+                  )}
+                </ul>
               </div>
             </div>
           )}
@@ -438,18 +500,22 @@ export default function App() {
           <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
             <button
               onClick={handleUpload}
-              disabled={!file || uploading}
+              disabled={files.length === 0 || uploading}
               style={{
                 padding: '10px 16px',
                 borderRadius: 8,
                 border: 0,
-                cursor: !file || uploading ? 'not-allowed' : 'pointer',
-                background: !file || uploading ? '#475569' : '#38bdf8',
+                cursor:
+                  files.length === 0 || uploading ? 'not-allowed' : 'pointer',
+                background:
+                  files.length === 0 || uploading ? '#475569' : '#38bdf8',
                 color: '#0f172a',
                 fontWeight: 700,
               }}
             >
-              {uploading ? 'Compressing & uploading...' : 'Upload Image'}
+              {uploading
+                ? 'Compressing & uploading...'
+                : `Upload Image${files.length > 1 ? 's' : ''}`}
             </button>
 
             <button
@@ -486,7 +552,7 @@ export default function App() {
                 color: '#bbf7d0',
               }}
             >
-              Upload berhasil: <code>{blob.pathname}</code>
+              Upload berhasil. Last file: <code>{blob.pathname}</code>
             </div>
           )}
 
