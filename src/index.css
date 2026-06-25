@@ -109,3 +109,83 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+.image-action-button {
+  position: relative;
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #020617;
+  color: #f8fafc;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.image-action-button:hover,
+.image-action-button:focus-visible {
+  border-color: #38bdf8;
+  color: #bae6fd;
+}
+
+.image-action-button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.image-action-button-copied {
+  border-color: #10b981;
+  background: #064e3b;
+  color: #d1fae5;
+}
+
+.image-tooltip {
+  position: relative;
+}
+
+.image-tooltip-label {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 2;
+  width: max-content;
+  max-width: 140px;
+  padding: 5px 8px;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: #020617;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+  white-space: nowrap;
+}
+
+.image-tooltip-label::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid #475569;
+  border-bottom: 1px solid #475569;
+  background: #020617;
+  transform: translate(-50%, -4px) rotate(45deg);
+}
+
+.image-tooltip:hover .image-tooltip-label,
+.image-tooltip:focus-visible .image-tooltip-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

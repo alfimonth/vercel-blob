@@ -1,3 +1,4 @@
+import { Check, Copy, Download } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 type UploadedBlob = {
@@ -57,6 +58,21 @@ function formatBytes(bytes: number) {
 
 function replaceFileExtension(fileName: string, extension: string) {
   return `${fileName.replace(/\.[^/.]+$/, '')}.${extension}`;
+}
+
+function getImageUrl(pathname: string, options?: { download?: boolean }) {
+  const params = new URLSearchParams();
+  params.set('pathname', pathname);
+
+  if (options?.download) {
+    params.set('download', '1');
+  }
+
+  return `/api/file?${params.toString()}`;
+}
+
+function getAbsoluteImageUrl(pathname: string) {
+  return new URL(getImageUrl(pathname), window.location.origin).toString();
 }
 
 function loadImage(file: File) {
@@ -162,6 +178,9 @@ export default function App() {
   const [loadingImages, setLoadingImages] = useState(false);
   const [deletingImages, setDeletingImages] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copiedImagePathname, setCopiedImagePathname] = useState<string | null>(
+    null,
+  );
 
   const selectedCount = selectedImagePathnames.size;
   const allVisibleImagesSelected =
@@ -250,6 +269,22 @@ export default function App() {
         ...images.map((image) => image.pathname),
       ]);
     });
+  }
+
+  async function copyImageUrl(pathname: string) {
+    try {
+      await navigator.clipboard.writeText(getAbsoluteImageUrl(pathname));
+      setCopiedImagePathname(pathname);
+      window.setTimeout(() => {
+        setCopiedImagePathname((current) =>
+          current === pathname ? null : current,
+        );
+      }, 1600);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to copy URL',
+      );
+    }
   }
 
   async function handleDeleteSelected() {
@@ -767,6 +802,47 @@ export default function App() {
                       }}
                     >
                       {new Date(image.uploadedAt).toLocaleString()}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        marginTop: 10,
+                      }}
+                    >
+                      <a
+                        href={getImageUrl(image.pathname, {
+                          download: true,
+                        })}
+                        download={image.pathname.replace('uploads/', '')}
+                        className="image-action-button image-tooltip"
+                        aria-label="Download image"
+                      >
+                        <Download size={18} strokeWidth={2.2} />
+                        <span className="image-tooltip-label">Download</span>
+                      </a>
+
+                      <button
+                        onClick={() => copyImageUrl(image.pathname)}
+                        className={`image-action-button image-tooltip${
+                          copiedImagePathname === image.pathname
+                            ? ' image-action-button-copied'
+                            : ''
+                        }`}
+                        aria-label="Copy image URL"
+                      >
+                        {copiedImagePathname === image.pathname ? (
+                          <Check size={18} strokeWidth={2.4} />
+                        ) : (
+                          <Copy size={18} strokeWidth={2.2} />
+                        )}
+                        <span className="image-tooltip-label">
+                          {copiedImagePathname === image.pathname
+                            ? 'Copied'
+                            : 'Copy URL'}
+                        </span>
+                      </button>
                     </div>
                   </div>
                 </article>
