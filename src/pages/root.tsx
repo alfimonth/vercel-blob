@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import {
   DirectoryToolbar,
@@ -17,41 +22,138 @@ import {
 } from '../libs';
 import type {
   CompressionStats,
-  DeleteResponse,
-  GalleryFolder,
-  GalleryImage,
   ListResponse,
   UploadedBlob,
 } from '../types';
 
+type UploadResult = {
+  blob: UploadedBlob;
+  compressed: boolean;
+  originalSize: number;
+  uploadSize: number;
+  outputType: string;
+};
+
+const galleryQueryKey = (prefix: string) => ['gallery', prefix] as const;
+
+async function readApiJson<T>(response: Response) {
+  const contentType = response.headers.get('content-type') ?? '';
+  const isJson = contentType.includes('application/json');
+  const result = isJson ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      isJson && result?.error
+        ? result.error
+        : typeof result === 'string' && result.length > 0
+          ? result
+          : 'Request failed',
+    );
+  }
+
+  if (!isJson) {
+    throw new Error('Expected JSON response from API');
+  }
+
+  return result as T;
+}
+
+async function fetchGalleryPage(prefix: string, cursor?: string) {
+  const params = new URLSearchParams();
+  params.set('prefix', prefix);
+
+  if (cursor) {
+    params.set('cursor', cursor);
+  }
+
+  const response = await fetch(`/api/list?${params.toString()}`);
+
+  return readApiJson<ListResponse>(response);
+}
+
+async function createFolder(name: string, parentPrefix: string) {
+  const response = await fetch('/api/create-folder', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      parentPrefix,
+    }),
+  });
+
+  return readApiJson(response);
+}
+
+async function deleteItems(folderPathnames: string[], pathnames: string[]) {
+  const response = await fetch('/api/delete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      folderPathnames,
+      pathnames,
+    }),
+  });
+
+  return readApiJson(response);
+}
+
 const RootPage = () => {
+  const queryClient = useQueryClient();
   const [files, setFiles] = useState<File[]>([]);
   const [blob, setBlob] = useState<UploadedBlob | null>(null);
   const [compressionStats, setCompressionStats] =
     useState<CompressionStats | null>(null);
 
   const [activePrefix, setActivePrefix] = useState(ROOT_PREFIX);
-  const [folders, setFolders] = useState<GalleryFolder[]>([]);
-  const [images, setImages] = useState<GalleryImage[]>([]);
   const [selectedFolderPathnames, setSelectedFolderPathnames] = useState<
     Set<string>
   >(new Set());
   const [selectedImagePathnames, setSelectedImagePathnames] = useState<
     Set<string>
   >(new Set());
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [hasMore, setHasMore] = useState(false);
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [loadingImages, setLoadingImages] = useState(false);
-  const [creatingFolder, setCreatingFolder] = useState(false);
-  const [deletingImages, setDeletingImages] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedImagePathname, setCopiedImagePathname] = useState<string | null>(
     null,
   );
+
+  const galleryQuery = useInfiniteQuery({
+    queryKey: galleryQueryKey(activePrefix),
+    queryFn: ({ pageParam }) => fetchGalleryPage(activePrefix, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.cursor : undefined,
+  });
+
+  const folders = useMemo(() => {
+    const folderMap = new Map<string, ListResponse['folders'][number]>();
+
+    galleryQuery.data?.pages.forEach((page) => {
+      page.folders.forEach((folder) => {
+        folderMap.set(folder.pathname, folder);
+      });
+    });
+
+    return [...folderMap.values()];
+  }, [galleryQuery.data]);
+  const images = useMemo(
+    () => galleryQuery.data?.pages.flatMap((page) => page.images) ?? [],
+    [galleryQuery.data],
+  );
+
+  const loadingImages =
+    galleryQuery.isLoading ||
+    galleryQuery.isFetching ||
+    galleryQuery.isFetchingNextPage;
+  const hasMore = galleryQuery.hasNextPage;
+  const queryErrorMessage =
+    galleryQuery.error instanceof Error ? galleryQuery.error.message : null;
 
   const selectedCount =
     selectedFolderPathnames.size + selectedImagePathnames.size;
@@ -86,7 +188,7 @@ const RootPage = () => {
   };
 
   const closeUploadModal = () => {
-    if (uploading) return;
+    if (uploadMutation.isPending) return;
 
     setUploadModalOpen(false);
     setDraggingFiles(false);
@@ -116,94 +218,82 @@ const RootPage = () => {
     }
   };
 
-  const loadImages = async (options?: { reset?: boolean; prefix?: string }) => {
-    setLoadingImages(true);
-    setErrorMessage(null);
-
-    try {
-      const prefix = options?.prefix ?? activePrefix;
-      const params = new URLSearchParams();
-      params.set('prefix', prefix);
-
-      if (!options?.reset && cursor) {
-        params.set('cursor', cursor);
-      }
-
-      const response = await fetch(`/api/list?${params.toString()}`);
-      const result = (await response.json()) as ListResponse;
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to load images');
-      }
-
-      setFolders(options?.reset ? result.folders : folders);
-      setImages((current) =>
-        options?.reset ? result.images : [...current, ...result.images],
-      );
-      if (options?.reset) {
-        setSelectedFolderPathnames(new Set());
-        setSelectedImagePathnames(new Set());
-      }
-      setCursor(result.cursor);
-      setHasMore(result.hasMore);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Failed to load images',
-      );
-    } finally {
-      setLoadingImages(false);
-    }
-  };
-
   const openFolder = (pathname: string) => {
     setActivePrefix(pathname);
-    setCursor(undefined);
-    void loadImages({ reset: true, prefix: pathname });
+    setErrorMessage(null);
   };
 
   const goBackDirectory = () => {
-    const parentPrefix = getParentPrefix(activePrefix);
-    setActivePrefix(parentPrefix);
-    setCursor(undefined);
-    void loadImages({ reset: true, prefix: parentPrefix });
+    setActivePrefix(getParentPrefix(activePrefix));
+    setErrorMessage(null);
   };
 
-  const handleCreateFolder = async () => {
+  const refreshGallery = () => {
+    setSelectedFolderPathnames(new Set());
+    setSelectedImagePathnames(new Set());
+    setErrorMessage(null);
+    void galleryQuery.refetch();
+  };
+
+  const createFolderMutation = useMutation({
+    mutationFn: ({
+      folderName,
+      prefix,
+    }: {
+      folderName: string;
+      prefix: string;
+    }) => createFolder(folderName, prefix),
+    onMutate: () => {
+      setErrorMessage(null);
+    },
+    onSuccess: async (_result, variables) => {
+      setSelectedFolderPathnames(new Set());
+      setSelectedImagePathnames(new Set());
+      await queryClient.invalidateQueries({
+        queryKey: galleryQueryKey(variables.prefix),
+      });
+    },
+    onError: (error) => {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to create folder',
+      );
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({
+      folderPathnames,
+      pathnames,
+    }: {
+      folderPathnames: string[];
+      pathnames: string[];
+      prefix: string;
+    }) => deleteItems(folderPathnames, pathnames),
+    onMutate: () => {
+      setErrorMessage(null);
+      setBlob(null);
+    },
+    onSuccess: async (_result, variables) => {
+      setSelectedFolderPathnames(new Set());
+      setSelectedImagePathnames(new Set());
+      await queryClient.invalidateQueries({
+        queryKey: galleryQueryKey(variables.prefix),
+      });
+    },
+    onError: (error) => {
+      setErrorMessage(error instanceof Error ? error.message : 'Delete failed');
+    },
+  });
+
+  const handleCreateFolder = () => {
     const folderName = window.prompt('New folder name');
 
     if (!folderName) return;
 
-    setCreatingFolder(true);
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch('/api/create-folder', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: folderName,
-          parentPrefix: activePrefix,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create folder');
-      }
-
-      await loadImages({ reset: true });
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Failed to create folder',
-      );
-    } finally {
-      setCreatingFolder(false);
-    }
+    createFolderMutation.mutate({
+      folderName,
+      prefix: activePrefix,
+    });
   };
 
   const toggleImageSelection = (pathname: string) => {
@@ -296,59 +386,21 @@ const RootPage = () => {
 
     if (!confirmed) return;
 
-    setDeletingImages(true);
-    setErrorMessage(null);
-    setBlob(null);
-
-    try {
-      const response = await fetch('/api/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          folderPathnames: selectedFolderPathnamesList,
-          pathnames: selectedPathnames,
-        }),
-      });
-
-      const result = (await response.json()) as DeleteResponse;
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Delete failed');
-      }
-
-      setImages((current) =>
-        current.filter(
-          (image) => !selectedImagePathnames.has(image.pathname),
-        ),
-      );
-      setFolders((current) =>
-        current.filter(
-          (folder) => !selectedFolderPathnames.has(folder.pathname),
-        ),
-      );
-      setSelectedFolderPathnames(new Set());
-      setSelectedImagePathnames(new Set());
-
-      await loadImages({ reset: true });
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Delete failed',
-      );
-    } finally {
-      setDeletingImages(false);
-    }
+    deleteMutation.mutate({
+      folderPathnames: selectedFolderPathnamesList,
+      pathnames: selectedPathnames,
+      prefix: activePrefix,
+    });
   };
 
-  const uploadImage = async (file: File) => {
+  const uploadImage = async (file: File, prefix: string) => {
     const compressionResult = await compressImageFile(file);
     const uploadFile = compressionResult.file;
 
     const response = await fetch(
       `/api/upload?filename=${encodeURIComponent(
         uploadFile.name,
-      )}&prefix=${encodeURIComponent(activePrefix)}`,
+      )}&prefix=${encodeURIComponent(prefix)}`,
       {
         method: 'POST',
         headers: {
@@ -373,21 +425,28 @@ const RootPage = () => {
     };
   };
 
-  const handleUpload = async () => {
-    if (files.length === 0) return;
+  const uploadMutation = useMutation({
+    mutationFn: async ({
+      selectedFiles,
+      prefix,
+    }: {
+      selectedFiles: File[];
+      prefix: string;
+    }) => {
+      const uploadResults: UploadResult[] = [];
 
-    setUploading(true);
-    setErrorMessage(null);
-    setBlob(null);
-    setCompressionStats(null);
-
-    try {
-      const uploadResults = [];
-
-      for (const selectedFile of files) {
-        uploadResults.push(await uploadImage(selectedFile));
+      for (const selectedFile of selectedFiles) {
+        uploadResults.push(await uploadImage(selectedFile, prefix));
       }
 
+      return uploadResults;
+    },
+    onMutate: () => {
+      setErrorMessage(null);
+      setBlob(null);
+      setCompressionStats(null);
+    },
+    onSuccess: async (uploadResults, variables) => {
       setCompressionStats({
         originalSize: uploadResults.reduce(
           (totalSize, result) => totalSize + result.originalSize,
@@ -408,20 +467,37 @@ const RootPage = () => {
       setFiles([]);
       setUploadModalOpen(false);
 
-      await loadImages({ reset: true });
-    } catch (error) {
+      await queryClient.invalidateQueries({
+        queryKey: galleryQueryKey(variables.prefix),
+      });
+    },
+    onError: (error) => {
       setErrorMessage(
         error instanceof Error ? error.message : 'Upload failed',
       );
-    } finally {
-      setUploading(false);
+    },
+  });
+
+  const handleUpload = () => {
+    if (files.length === 0) return;
+
+    uploadMutation.mutate({
+      selectedFiles: files,
+      prefix: activePrefix,
+    });
+  };
+
+  const handleLoadMore = () => {
+    setErrorMessage(null);
+    if (galleryQuery.hasNextPage && !galleryQuery.isFetchingNextPage) {
+      void galleryQuery.fetchNextPage();
     }
   };
 
   useEffect(() => {
-    loadImages({ reset: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setSelectedFolderPathnames(new Set());
+    setSelectedImagePathnames(new Set());
+  }, [activePrefix]);
 
   useEffect(() => {
     return () => {
@@ -441,7 +517,7 @@ const RootPage = () => {
           isRootDirectory={isRootDirectory}
           loadingImages={loadingImages}
           onBack={goBackDirectory}
-          onRefresh={() => loadImages({ reset: true })}
+          onRefresh={refreshGallery}
         />
 
         {uploadModalOpen && (
@@ -451,7 +527,7 @@ const RootPage = () => {
             files={files}
             selectedFilePreviews={selectedFilePreviews}
             selectedFilesSize={selectedFilesSize}
-            uploading={uploading}
+            uploading={uploadMutation.isPending}
             onClose={closeUploadModal}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -464,17 +540,17 @@ const RootPage = () => {
         <UploadStatus
           blob={blob}
           compressionStats={compressionStats}
-          errorMessage={errorMessage}
+          errorMessage={errorMessage ?? queryErrorMessage}
         />
 
         <GalleryToolbar
           allVisibleItemsSelected={allVisibleItemsSelected}
-          creatingFolder={creatingFolder}
-          deletingImages={deletingImages}
+          creatingFolder={createFolderMutation.isPending}
+          deletingImages={deleteMutation.isPending}
           folderCount={folders.length}
           imageCount={images.length}
           selectedCount={selectedCount}
-          uploading={uploading}
+          uploading={uploadMutation.isPending}
           visibleItemCount={visibleItemCount}
           onCreateFolder={handleCreateFolder}
           onDeleteSelected={handleDeleteSelected}
@@ -491,7 +567,7 @@ const RootPage = () => {
           selectedFolderPathnames={selectedFolderPathnames}
           selectedImagePathnames={selectedImagePathnames}
           onCopyImageUrl={copyImageUrl}
-          onLoadMore={() => loadImages()}
+          onLoadMore={handleLoadMore}
           onOpenFolder={openFolder}
           onToggleFolderSelection={toggleFolderSelection}
           onToggleImageSelection={toggleImageSelection}
