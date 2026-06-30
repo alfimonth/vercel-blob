@@ -435,7 +435,7 @@ const RootPage = () => {
     <>
       <Header />
 
-      <section style={{ maxWidth: 1080, textAlign: 'left' }}>
+      <section className="max-w-[1080px] text-left">
         <DirectoryToolbar
           activePrefix={activePrefix}
           isRootDirectory={isRootDirectory}

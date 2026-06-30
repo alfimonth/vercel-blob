@@ -37,56 +37,16 @@ const UploadModal = ({
   onSelectedFiles,
   onUpload,
 }: UploadModalProps) => (
-  <div
-    style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 20,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 20,
-      background: 'rgba(2, 6, 23, 0.72)',
-      backdropFilter: 'blur(8px)',
-    }}
-  >
-    <div
-      style={{
-        width: 'min(640px, 100%)',
-        maxHeight: 'min(760px, calc(100vh - 40px))',
-        overflow: 'auto',
-        borderRadius: 16,
-        background: '#0f172a',
-        border: '1px solid #334155',
-        boxShadow: '0 24px 80px rgba(0, 0, 0, 0.45)',
-        textAlign: 'left',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          padding: '18px 20px',
-          borderBottom: '1px solid #334155',
-        }}
-      >
+  <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/70 p-5 backdrop-blur">
+    <div className="max-h-[min(760px,calc(100vh-40px))] w-[min(640px,100%)] overflow-auto rounded-2xl border border-slate-700 bg-slate-900 text-left shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-700 px-5 py-[18px]">
         <div>
-          <h2 style={{ margin: 0, color: '#f8fafc', fontSize: 20 }}>
+          <h2 className="m-0 text-xl text-slate-50">
             Upload images
           </h2>
           <div
             title={formatDirectory(activePrefix)}
-            style={{
-              marginTop: 4,
-              color: '#94a3b8',
-              fontSize: 13,
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
+            className="mt-1 overflow-hidden truncate font-mono text-[13px] text-slate-400"
           >
             {formatDirectory(activePrefix)}
           </div>
@@ -96,84 +56,36 @@ const UploadModal = ({
           onClick={onClose}
           disabled={uploading}
           aria-label="Close upload modal"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 36,
-            height: 36,
-            borderRadius: 8,
-            border: '1px solid #475569',
-            background: '#020617',
-            color: '#f8fafc',
-            cursor: uploading ? 'not-allowed' : 'pointer',
-          }}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 bg-slate-950 text-slate-50 disabled:cursor-not-allowed enabled:cursor-pointer"
         >
           <X size={18} />
         </button>
       </div>
 
-      <div style={{ padding: 20 }}>
+      <div className="p-5">
         <label
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: 220,
-            padding: 24,
-            borderRadius: 14,
-            border: draggingFiles ? '1px solid #38bdf8' : '1px dashed #475569',
-            background: draggingFiles ? '#082f49' : '#111827',
-            color: '#e2e8f0',
-            cursor: uploading ? 'not-allowed' : 'pointer',
-            textAlign: 'center',
-          }}
+          className={`flex min-h-[220px] flex-col items-center justify-center rounded-[14px] p-6 text-center text-slate-200 ${
+            draggingFiles
+              ? 'border border-sky-400 bg-sky-950'
+              : 'border border-dashed border-slate-600 bg-slate-900'
+          } ${uploading ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 54,
-              height: 54,
-              borderRadius: 14,
-              background: '#020617',
-              border: '1px solid #334155',
-              color: '#38bdf8',
-            }}
-          >
+          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[14px] border border-slate-700 bg-slate-950 text-sky-400">
             <Upload size={26} />
           </div>
 
-          <div
-            style={{
-              marginTop: 14,
-              fontSize: 18,
-              fontWeight: 700,
-              color: '#f8fafc',
-            }}
-          >
+          <div className="mt-3.5 text-lg font-bold text-slate-50">
             Drop images here
           </div>
 
-          <div style={{ marginTop: 6, color: '#94a3b8', fontSize: 14 }}>
+          <div className="mt-1.5 text-sm text-slate-400">
             JPEG, PNG, WebP, GIF, AVIF, or SVG
           </div>
 
-          <span
-            style={{
-              marginTop: 16,
-              padding: '9px 12px',
-              borderRadius: 8,
-              background: '#38bdf8',
-              color: '#0f172a',
-              fontWeight: 700,
-            }}
-          >
+          <span className="mt-4 rounded-lg bg-sky-400 px-3 py-[9px] font-bold text-slate-900">
             Choose files
           </span>
 
@@ -182,7 +94,7 @@ const UploadModal = ({
             multiple
             disabled={uploading}
             accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml"
-            style={{ display: 'none' }}
+            className="hidden"
             onChange={(event) => {
               onSelectedFiles(event.target.files ?? []);
             }}
@@ -190,45 +102,21 @@ const UploadModal = ({
         </label>
 
         {files.length > 0 && (
-          <div
-            style={{
-              marginTop: 16,
-              display: 'flex',
-              gap: 16,
-              alignItems: 'flex-start',
-              padding: 12,
-              borderRadius: 12,
-              background: '#111827',
-              border: '1px solid #334155',
-              color: '#d1d5db',
-            }}
-          >
+          <div className="mt-4 flex items-start gap-4 rounded-xl border border-slate-700 bg-slate-900 p-3 text-slate-300">
             {selectedFilePreviews.length > 0 && (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 72px)',
-                  gap: 8,
-                }}
-              >
+              <div className="grid grid-cols-[repeat(2,72px)] gap-2">
                 {selectedFilePreviews.slice(0, 4).map((preview, index) => (
                   <img
                     key={`${preview.file.name}-${preview.file.lastModified}`}
                     src={preview.url}
                     alt={`Selected preview ${index + 1}`}
-                    style={{
-                      width: 72,
-                      height: 72,
-                      objectFit: 'cover',
-                      borderRadius: 10,
-                      border: '1px solid #334155',
-                    }}
+                    className="h-[72px] w-[72px] rounded-[10px] border border-slate-700 object-cover"
                   />
                 ))}
               </div>
             )}
 
-            <div style={{ minWidth: 0 }}>
+            <div className="min-w-0">
               <div>
                 <strong>Selected:</strong> {files.length} file
                 {files.length === 1 ? '' : 's'}
@@ -236,7 +124,7 @@ const UploadModal = ({
               <div>
                 <strong>Total size:</strong> {formatBytes(selectedFilesSize)}
               </div>
-              <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: '#cbd5e1' }}>
+              <ul className="mt-2 list-disc pl-[18px] text-slate-300">
                 {files.slice(0, 5).map((selectedFile) => (
                   <li key={`${selectedFile.name}-${selectedFile.lastModified}`}>
                     {selectedFile.name} ({formatBytes(selectedFile.size)})
@@ -248,26 +136,11 @@ const UploadModal = ({
           </div>
         )}
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 10,
-            marginTop: 18,
-          }}
-        >
+        <div className="mt-[18px] flex justify-end gap-2.5">
           <button
             onClick={onClose}
             disabled={uploading}
-            style={{
-              padding: '10px 14px',
-              borderRadius: 8,
-              border: '1px solid #475569',
-              background: '#020617',
-              color: '#f8fafc',
-              cursor: uploading ? 'not-allowed' : 'pointer',
-              fontWeight: 700,
-            }}
+            className="rounded-lg border border-slate-600 bg-slate-950 px-3.5 py-2.5 font-bold text-slate-50 disabled:cursor-not-allowed enabled:cursor-pointer"
           >
             Cancel
           </button>
@@ -275,15 +148,7 @@ const UploadModal = ({
           <button
             onClick={onUpload}
             disabled={files.length === 0 || uploading}
-            style={{
-              padding: '10px 14px',
-              borderRadius: 8,
-              border: 0,
-              background: files.length === 0 || uploading ? '#475569' : '#38bdf8',
-              color: '#0f172a',
-              cursor: files.length === 0 || uploading ? 'not-allowed' : 'pointer',
-              fontWeight: 700,
-            }}
+            className="rounded-lg border-0 px-3.5 py-2.5 font-bold text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-sky-400"
           >
             {uploading
               ? 'Compressing & uploading...'

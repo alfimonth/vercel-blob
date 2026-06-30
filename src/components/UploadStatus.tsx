@@ -13,38 +13,20 @@ const UploadStatus = ({
   errorMessage,
 }: UploadStatusProps) => (
   <>
-    {errorMessage && <p style={{ marginTop: 16, color: '#fca5a5' }}>{errorMessage}</p>}
+    {errorMessage && <p className="mt-4 text-red-300">{errorMessage}</p>}
 
     {blob && (
-      <div
-        style={{
-          marginTop: 20,
-          padding: 12,
-          borderRadius: 12,
-          background: '#052e16',
-          border: '1px solid #166534',
-          color: '#bbf7d0',
-        }}
-      >
+      <div className="mt-5 rounded-xl border border-green-800 bg-green-950 p-3 text-green-200">
         Upload berhasil. Last file: <code>{blob.pathname}</code>
       </div>
     )}
 
     {compressionStats && (
-      <div
-        style={{
-          marginTop: 12,
-          padding: 12,
-          borderRadius: 12,
-          background: '#082f49',
-          border: '1px solid #075985',
-          color: '#bae6fd',
-        }}
-      >
+      <div className="mt-3 rounded-xl border border-sky-800 bg-sky-950 p-3 text-sky-200">
         {compressionStats.compressed ? 'Compressed' : 'Uploaded original'}:{' '}
         {formatBytes(compressionStats.originalSize)} {'->'}{' '}
         {formatBytes(compressionStats.uploadSize)}
-        <span style={{ color: '#7dd3fc' }}> ({compressionStats.outputType})</span>
+        <span className="text-sky-300"> ({compressionStats.outputType})</span>
       </div>
     )}
   </>

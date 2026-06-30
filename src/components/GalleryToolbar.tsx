@@ -29,36 +29,18 @@ const GalleryToolbar = ({
   onOpenUpload,
   onToggleAllVisible,
 }: GalleryToolbarProps) => (
-  <div style={{ marginTop: 32 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-      <span style={{ color: '#cbd5e1' }}>
+  <div className="mt-8">
+    <div className="flex justify-between gap-4">
+      <span className="text-slate-300">
         {folderCount} folder{folderCount === 1 ? '' : 's'} · {imageCount} image
         {imageCount === 1 ? '' : 's'}
       </span>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="flex flex-wrap items-center gap-2.5">
         <button
           onClick={onCreateFolder}
           disabled={creatingFolder}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '9px 12px',
-            borderRadius: 8,
-            border: 0,
-            cursor: creatingFolder ? 'not-allowed' : 'pointer',
-            background: creatingFolder ? '#475569' : '#22c55e',
-            color: '#052e16',
-            fontWeight: 700,
-          }}
+          className="inline-flex items-center gap-2 rounded-lg border-0 px-3 py-[9px] font-bold text-green-950 disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-green-500"
         >
           <FolderPlus size={16} />
           {creatingFolder ? 'Creating...' : 'New Folder'}
@@ -67,18 +49,7 @@ const GalleryToolbar = ({
         <button
           onClick={onOpenUpload}
           disabled={uploading}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '9px 12px',
-            borderRadius: 8,
-            border: 0,
-            cursor: uploading ? 'not-allowed' : 'pointer',
-            background: uploading ? '#475569' : '#38bdf8',
-            color: '#0f172a',
-            fontWeight: 700,
-          }}
+          className="inline-flex items-center gap-2 rounded-lg border-0 px-3 py-[9px] font-bold text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-sky-400"
         >
           <Upload size={16} />
           {uploading ? 'Uploading...' : 'Upload'}
@@ -86,34 +57,10 @@ const GalleryToolbar = ({
       </div>
     </div>
 
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 24,
-        gap: 16,
-        flexWrap: 'wrap',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
+    <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         {visibleItemCount > 0 && (
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              color: '#cbd5e1',
-              fontSize: 14,
-            }}
-          >
+          <label className="flex items-center gap-2 text-sm text-slate-300">
             <input
               type="checkbox"
               checked={allVisibleItemsSelected}
@@ -128,15 +75,7 @@ const GalleryToolbar = ({
         <button
           onClick={onDeleteSelected}
           disabled={deletingImages}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: 0,
-            cursor: deletingImages ? 'not-allowed' : 'pointer',
-            background: deletingImages ? '#475569' : '#ef4444',
-            color: '#fff',
-            fontWeight: 700,
-          }}
+          className="rounded-lg border-0 px-3 py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-red-500"
         >
           {deletingImages ? 'Deleting...' : `Delete checked (${selectedCount})`}
         </button>

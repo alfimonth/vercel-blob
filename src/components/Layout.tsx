@@ -1,13 +1,5 @@
 const Layout = ({ children }: { children: React.ReactNode }) =>
-  <main
-    style={{
-      minHeight: '100vh',
-      padding: 40,
-      fontFamily:
-        'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      color: '#f8fafc',
-    }}
-  >
+  <main className="min-h-screen p-10 font-sans text-slate-50">
     {children}
   </main>
 

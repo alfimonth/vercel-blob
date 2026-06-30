@@ -4,26 +4,16 @@ const Header = () => (
   <Link
     to="/"
     aria-label="webpis home"
-    style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 12,
-      margin: '0 auto 28px',
-      textDecoration: 'none',
-    }}
+    className="mx-auto mb-7 inline-flex items-center gap-3 no-underline"
   >
     <img
       src="/webpis.png"
       alt=""
       width={56}
       height={56}
-      style={{
-        width: 56,
-        height: 56,
-        objectFit: 'contain',
-      }}
+      className="h-14 w-14 object-contain"
     />
-    <h1 style={{ margin: 0 }}>webpis</h1>
+    <h1 className="m-0">webpis</h1>
   </Link>
 );
 
