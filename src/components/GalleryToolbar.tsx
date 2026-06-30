@@ -1,4 +1,4 @@
-import { FolderPlus, Upload } from 'lucide-react';
+import { ClipboardPaste, FolderInput, FolderPlus, X, Upload } from 'lucide-react';
 
 type GalleryToolbarProps = {
   allVisibleItemsSelected: boolean;
@@ -6,12 +6,17 @@ type GalleryToolbarProps = {
   deletingImages: boolean;
   folderCount: number;
   imageCount: number;
+  moveItemCount: number;
+  movingItems: boolean;
   selectedCount: number;
   uploading: boolean;
   visibleItemCount: number;
   onCreateFolder: () => void;
+  onCancelMove: () => void;
   onDeleteSelected: () => void;
+  onMoveSelected: () => void;
   onOpenUpload: () => void;
+  onPasteMoved: () => void;
   onToggleAllVisible: () => void;
 };
 
@@ -21,12 +26,17 @@ const GalleryToolbar = ({
   deletingImages,
   folderCount,
   imageCount,
+  moveItemCount,
+  movingItems,
   selectedCount,
   uploading,
   visibleItemCount,
   onCreateFolder,
+  onCancelMove,
   onDeleteSelected,
+  onMoveSelected,
   onOpenUpload,
+  onPasteMoved,
   onToggleAllVisible,
 }: GalleryToolbarProps) => (
   <div className="mt-8">
@@ -71,14 +81,49 @@ const GalleryToolbar = ({
         )}
       </div>
 
-      {selectedCount > 0 && (
-        <button
-          onClick={onDeleteSelected}
-          disabled={deletingImages}
-          className="rounded-lg border-0 px-3 py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-red-500"
-        >
-          {deletingImages ? 'Deleting...' : `Delete (${selectedCount})`}
-        </button>
+      {(selectedCount > 0 || moveItemCount > 0) && (
+        <div className="flex flex-wrap items-center gap-2.5">
+          {moveItemCount > 0 ? (
+            <>
+              <button
+                onClick={onPasteMoved}
+                disabled={movingItems || deletingImages}
+                className="inline-flex items-center gap-2 rounded-lg border-0 px-3 py-2 font-bold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-amber-400"
+              >
+                <ClipboardPaste size={16} />
+                {movingItems ? 'Moving...' : `Paste (${moveItemCount})`}
+              </button>
+
+              <button
+                onClick={onCancelMove}
+                disabled={movingItems}
+                aria-label="Cancel move"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-600 bg-slate-950 p-2 text-slate-50 disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onMoveSelected}
+              disabled={movingItems || deletingImages}
+              className="inline-flex items-center gap-2 rounded-lg border-0 px-3 py-2 font-bold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-amber-400"
+            >
+              <FolderInput size={16} />
+              {`Move (${selectedCount})`}
+            </button>
+          )}
+
+          {selectedCount > 0 && (
+            <button
+              onClick={onDeleteSelected}
+              disabled={deletingImages || movingItems}
+              className="rounded-lg border-0 px-3 py-2 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-600 enabled:cursor-pointer enabled:bg-red-500"
+            >
+              {deletingImages ? 'Deleting...' : `Delete (${selectedCount})`}
+            </button>
+          )}
+        </div>
       )}
     </div>
   </div>

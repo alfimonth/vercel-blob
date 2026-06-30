@@ -23,6 +23,7 @@ import {
 import type {
   CompressionStats,
   ListResponse,
+  MoveResponse,
   UploadedBlob,
 } from '../types';
 
@@ -32,6 +33,12 @@ type UploadResult = {
   originalSize: number;
   uploadSize: number;
   outputType: string;
+};
+
+type PendingMove = {
+  folderPathnames: string[];
+  pathnames: string[];
+  sourcePrefix: string;
 };
 
 const galleryQueryKey = (prefix: string) => ['gallery', prefix] as const;
@@ -101,6 +108,26 @@ async function deleteItems(folderPathnames: string[], pathnames: string[]) {
   return readApiJson(response);
 }
 
+async function moveItems(
+  folderPathnames: string[],
+  pathnames: string[],
+  targetPrefix: string,
+) {
+  const response = await fetch('/api/move', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      folderPathnames,
+      pathnames,
+      targetPrefix,
+    }),
+  });
+
+  return readApiJson<MoveResponse>(response);
+}
+
 const RootPage = () => {
   const queryClient = useQueryClient();
   const [files, setFiles] = useState<File[]>([]);
@@ -122,6 +149,7 @@ const RootPage = () => {
   const [copiedImagePathname, setCopiedImagePathname] = useState<string | null>(
     null,
   );
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
 
   const galleryQuery = useInfiniteQuery({
     queryKey: galleryQueryKey(activePrefix),
@@ -157,6 +185,9 @@ const RootPage = () => {
 
   const selectedCount =
     selectedFolderPathnames.size + selectedImagePathnames.size;
+  const moveItemCount = pendingMove
+    ? pendingMove.folderPathnames.length + pendingMove.pathnames.length
+    : 0;
   const isRootDirectory = activePrefix === ROOT_PREFIX;
   const visibleItemCount = folders.length + images.length;
   const allVisibleItemsSelected =
@@ -285,6 +316,39 @@ const RootPage = () => {
     },
   });
 
+  const moveMutation = useMutation({
+    mutationFn: ({
+      folderPathnames,
+      pathnames,
+      targetPrefix,
+    }: {
+      folderPathnames: string[];
+      pathnames: string[];
+      sourcePrefix: string;
+      targetPrefix: string;
+    }) => moveItems(folderPathnames, pathnames, targetPrefix),
+    onMutate: () => {
+      setErrorMessage(null);
+      setBlob(null);
+    },
+    onSuccess: async (result, variables) => {
+      setSelectedFolderPathnames(new Set());
+      setSelectedImagePathnames(new Set());
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: galleryQueryKey(variables.sourcePrefix),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: galleryQueryKey(result.targetPrefix),
+        }),
+      ]);
+      setPendingMove(null);
+    },
+    onError: (error) => {
+      setErrorMessage(error instanceof Error ? error.message : 'Move failed');
+    },
+  });
+
   const handleCreateFolder = () => {
     const folderName = window.prompt('New folder name');
 
@@ -391,6 +455,36 @@ const RootPage = () => {
       pathnames: selectedPathnames,
       prefix: activePrefix,
     });
+  };
+
+  const handleMoveSelected = () => {
+    if (selectedCount === 0) return;
+
+    setPendingMove({
+      folderPathnames: [...selectedFolderPathnames],
+      pathnames: [...selectedImagePathnames],
+      sourcePrefix: activePrefix,
+    });
+    setSelectedFolderPathnames(new Set());
+    setSelectedImagePathnames(new Set());
+    setErrorMessage(null);
+  };
+
+  const handlePasteMoved = () => {
+    if (!pendingMove || moveItemCount === 0) return;
+
+    moveMutation.mutate({
+      folderPathnames: pendingMove.folderPathnames,
+      pathnames: pendingMove.pathnames,
+      sourcePrefix: pendingMove.sourcePrefix,
+      targetPrefix: activePrefix,
+    });
+  };
+
+  const handleCancelMove = () => {
+    if (moveMutation.isPending) return;
+
+    setPendingMove(null);
   };
 
   const uploadImage = async (file: File, prefix: string) => {
@@ -549,12 +643,17 @@ const RootPage = () => {
           deletingImages={deleteMutation.isPending}
           folderCount={folders.length}
           imageCount={images.length}
+          moveItemCount={moveItemCount}
+          movingItems={moveMutation.isPending}
           selectedCount={selectedCount}
           uploading={uploadMutation.isPending}
           visibleItemCount={visibleItemCount}
           onCreateFolder={handleCreateFolder}
+          onCancelMove={handleCancelMove}
           onDeleteSelected={handleDeleteSelected}
+          onMoveSelected={handleMoveSelected}
           onOpenUpload={() => setUploadModalOpen(true)}
+          onPasteMoved={handlePasteMoved}
           onToggleAllVisible={toggleAllVisibleImages}
         />
 

@@ -34,6 +34,12 @@ type DeleteResponse = {
   error?: string;
 };
 
+type MoveResponse = {
+  moved?: number;
+  targetPrefix: string;
+  error?: string;
+};
+
 type CompressionStats = {
   originalSize: number;
   uploadSize: number;
@@ -47,5 +53,6 @@ export type {
   GalleryFolder,
   ListResponse,
   DeleteResponse,
+  MoveResponse,
   CompressionStats,
 };
